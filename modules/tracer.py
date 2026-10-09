@@ -39,6 +39,7 @@ Trace (一次完整查询):
 """
 
 import time
+import uuid
 import json
 from contextlib import ExitStack
 from typing import List, Dict, Optional
@@ -95,7 +96,7 @@ class RAGTracer:
     def start_trace(self, query: str, metadata: Dict = None):
         """开始一次查询的追踪（创建根 span + trace）"""
         self.start_time = time.time()
-        self.trace_id = f"trace_{int(time.time() * 1000)}"
+        self.trace_id = uuid.uuid4().hex  # 32 lowercase hex chars, required by Langfuse
         self.spans = []
         self.child_spans = []
 
@@ -109,6 +110,7 @@ class RAGTracer:
                     as_type="span",
                     input={"query": query},
                     metadata=metadata or {},
+                    trace_context={'trace_id': self.trace_id},
                 )
                 self.root_span = self._stack.enter_context(root_cm)
             except Exception as e:
@@ -142,7 +144,7 @@ class RAGTracer:
         if self.enabled and self.langfuse and self.root_span is not None and self._stack is not None:
             try:
                 # v4 推荐: start_as_current_observation 上下文管理器，退出时自动 .end()
-                child_cm = self.langfuse.start_as_current_observation(
+                child_cm = self.root_span.start_as_current_observation(
                     name=name,
                     as_type=obs_type,
                     input=input_data,
